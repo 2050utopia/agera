@@ -16,8 +16,9 @@ final class WorkerHandler extends Handler {
   static final int MSG_CALL_UPDATABLE = 3;
   static final int MSG_CALL_MAYBE_START_FLOW = 4;
   static final int MSG_CALL_ACKNOWLEDGE_CANCEL = 5;
-  static final int MSG_CALL_LOW_PASS_UPDATE = 6;
   private static final ThreadLocal<WeakReference<WorkerHandler>> handlers = new ThreadLocal<>();
+  @NonNull
+  private final IdentityMultimap<Updatable, Object> scheduledUpdatables;
 
   @NonNull
   static WorkerHandler workerHandler() {
@@ -30,31 +31,44 @@ final class WorkerHandler extends Handler {
     return handler;
   }
 
-  private WorkerHandler() {}
+  private WorkerHandler() {
+    this.scheduledUpdatables = new IdentityMultimap<>();
+  }
+
+  synchronized void removeUpdatable(@NonNull final Updatable updatable,
+      @NonNull final Object token) {
+    scheduledUpdatables.removeKeyValuePair(updatable, token);
+  }
+
+  synchronized void update(@NonNull final Updatable updatable, @NonNull final Object token) {
+    if (scheduledUpdatables.addKeyValuePair(updatable, token)) {
+      obtainMessage(WorkerHandler.MSG_CALL_UPDATABLE, updatable).sendToTarget();
+    }
+  }
 
   @Override
   public void handleMessage(final Message message) {
     switch (message.what) {
       case MSG_UPDATE:
-        ((BaseObservable.Worker) message.obj).sendUpdate();
+        ((BaseObservable) message.obj).sendUpdate();
         break;
       case MSG_FIRST_ADDED:
-        ((BaseObservable.Worker) message.obj).callFirstUpdatableAdded();
+        ((BaseObservable) message.obj).observableActivated();
         break;
       case MSG_LAST_REMOVED:
-        ((BaseObservable.Worker) message.obj).callLastUpdatableRemoved();
+        ((BaseObservable) message.obj).observableDeactivated();
         break;
       case MSG_CALL_UPDATABLE:
-        ((Updatable) message.obj).update();
+        final Updatable updatable = (Updatable) message.obj;
+        if (scheduledUpdatables.removeKey(updatable)) {
+          updatable.update();
+        }
         break;
       case MSG_CALL_MAYBE_START_FLOW:
         ((CompiledRepository) message.obj).maybeStartFlow();
         break;
       case MSG_CALL_ACKNOWLEDGE_CANCEL:
         ((CompiledRepository) message.obj).acknowledgeCancel();
-        break;
-      case MSG_CALL_LOW_PASS_UPDATE:
-        ((Observables.LowPassFilterObservable) message.obj).lowPassUpdate();
         break;
       default:
     }

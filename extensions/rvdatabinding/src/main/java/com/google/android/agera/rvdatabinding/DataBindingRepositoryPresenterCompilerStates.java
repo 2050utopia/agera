@@ -13,23 +13,28 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.google.android.agera.testapp;
-
-import static android.graphics.BitmapFactory.decodeByteArray;
-import static com.google.android.agera.Result.absentIfNull;
+package com.google.android.agera.rvdatabinding;
 
 import com.google.android.agera.Function;
-import com.google.android.agera.Result;
-import com.google.android.agera.net.HttpResponse;
+import com.google.android.agera.rvadapter.RepositoryPresenterCompilerStates.RPCompile;
 
-import android.graphics.Bitmap;
+import android.support.annotation.LayoutRes;
 import android.support.annotation.NonNull;
 
-final class HttpResponseToBitmap implements Function<HttpResponse, Result<Bitmap>> {
-  @NonNull
-  @Override
-  public Result<Bitmap> apply(@NonNull final HttpResponse input) {
-    final byte[] body = input.getBody();
-    return absentIfNull(decodeByteArray(body, 0, body.length));
+public interface DataBindingRepositoryPresenterCompilerStates {
+  interface DBRPItemBinding<TVal, TRet> {
+    @NonNull
+    TRet itemId(@LayoutRes int itemId);
+
+    @NonNull
+    TRet itemIdForItem(@NonNull Function<TVal, Integer> itemIdForItem);
   }
+
+  interface DBRPHandlerBinding<TRet> {
+    @NonNull
+    TRet handler(@LayoutRes int handlerId, @NonNull Object handler);
+  }
+
+  interface DBRPHandlerBindingCompile<TVal>
+      extends RPCompile<TVal>, DBRPHandlerBinding<DBRPHandlerBindingCompile<TVal>> {}
 }

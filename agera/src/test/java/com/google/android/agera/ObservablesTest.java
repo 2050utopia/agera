@@ -24,11 +24,13 @@ import static com.google.android.agera.Observables.perLoopObservable;
 import static com.google.android.agera.Observables.perMillisecondObservable;
 import static com.google.android.agera.Observables.updateDispatcher;
 import static com.google.android.agera.Repositories.repositoryWithInitialValue;
+import static com.google.android.agera.WorkerHandler.workerHandler;
 import static com.google.android.agera.test.matchers.HasPrivateConstructor.hasPrivateConstructor;
 import static com.google.android.agera.test.matchers.UpdatableUpdated.wasUpdated;
 import static com.google.android.agera.test.mocks.MockUpdatable.mockUpdatable;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.mockito.Mockito.mock;
@@ -40,9 +42,11 @@ import static org.robolectric.annotation.Config.NONE;
 import static org.robolectric.internal.ShadowExtractor.extract;
 import static org.robolectric.shadows.ShadowLooper.getShadowMainLooper;
 import static org.robolectric.shadows.ShadowLooper.idleMainLooper;
+import static org.robolectric.shadows.ShadowLooper.runUiThreadTasksIncludingDelayedTasks;
 
 import com.google.android.agera.test.mocks.MockUpdatable;
 
+import android.support.annotation.NonNull;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -56,6 +60,7 @@ import org.robolectric.util.Scheduler;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Config(manifest = NONE)
 @RunWith(RobolectricTestRunner.class)
@@ -65,6 +70,7 @@ public final class ObservablesTest {
   private Observable compositeObservableOfMany;
   private Observable chainedCompositeObservableOfOne;
   private Observable chainedCompositeObservable;
+  private Observable chainedDupeCompositeObservable;
   private UpdateDispatcher firstUpdateDispatcher;
   private UpdateDispatcher secondUpdateDispatcher;
   private UpdateDispatcher thirdUpdateDispatcher;
@@ -97,6 +103,9 @@ public final class ObservablesTest {
         compositeObservable(firstUpdateDispatcher));
     chainedCompositeObservable = compositeObservable(compositeObservable(firstUpdateDispatcher,
         secondUpdateDispatcher), thirdUpdateDispatcher);
+    chainedDupeCompositeObservable = compositeObservable(firstUpdateDispatcher,
+        compositeObservable(firstUpdateDispatcher, secondUpdateDispatcher),
+        secondUpdateDispatcher, thirdUpdateDispatcher);
     updatable = mockUpdatable();
     secondUpdatable = mockUpdatable();
     looper = getShadowMainLooper();
@@ -151,6 +160,18 @@ public final class ObservablesTest {
     thirdUpdateDispatcher.update();
 
     assertThat(updatable, wasUpdated());
+  }
+
+  @Test
+  public void shouldUpdateOnlyOnceFromDupeInChainedComposite() {
+    final Updatable updatable = mock(Updatable.class);
+    chainedDupeCompositeObservable.addUpdatable(updatable);
+    runUiThreadTasksIncludingDelayedTasks();
+
+    thirdUpdateDispatcher.update();
+    runUiThreadTasksIncludingDelayedTasks();
+
+    verify(updatable).update();
   }
 
   @Test
@@ -230,6 +251,15 @@ public final class ObservablesTest {
     verify(supplier).get();
   }
 
+  @Test(expected = NullPointerException.class)
+  public void shouldThrowNullPointerExceptionForAddNullUpdatable() {
+    updateDispatcher.addUpdatable(null);
+  }
+
+  @Test(expected = NullPointerException.class)
+  public void shouldThrowNullPointerExceptionForRemoveNullUpdatable() {
+    updateDispatcher.removeUpdatable(null);
+  }
 
   @Test
   public void shouldOnlyUpdateOncePerLooper() {
@@ -295,6 +325,32 @@ public final class ObservablesTest {
   }
 
   @Test
+  public void shouldUpdateCompositeOfPerMillisecondObservable() {
+    final long expectedDelayedTime = scheduler.getCurrentTime() + FILTER_TIME;
+    updatable.addToObservable(compositeObservable(perMillisecondObservable(
+        FILTER_TIME, updateDispatcher), updateDispatcher()));
+
+    updateDispatcher.update();
+    idleMainLooper(FILTER_TIME);
+
+    assertThat(updatable, wasUpdated());
+    assertThat(scheduler.getCurrentTime(), greaterThanOrEqualTo(expectedDelayedTime));
+  }
+
+  @Test
+  public void shouldUpdateCompositeOfSinglePerMillisecondObservable() {
+    final long expectedDelayedTime = scheduler.getCurrentTime() + FILTER_TIME;
+    updatable.addToObservable(compositeObservable(perMillisecondObservable(
+        FILTER_TIME, updateDispatcher)));
+
+    updateDispatcher.update();
+    idleMainLooper(FILTER_TIME);
+
+    assertThat(updatable, wasUpdated());
+    assertThat(scheduler.getCurrentTime(), greaterThanOrEqualTo(expectedDelayedTime));
+  }
+
+  @Test
   public void shouldHandleManyObservables() {
     final int numberOfObservables = 10;
     for (int passes = 0; passes < 3; passes++) {
@@ -313,7 +369,77 @@ public final class ObservablesTest {
   }
 
   @Test
+  public void shouldIgnoreUnknownMessage() {
+    workerHandler().obtainMessage(-1).sendToTarget();
+  }
+
+  @Test
+  public void shouldNotAllowAddingUpdatablesOnNonLooperThreadInBaseObservable() {
+    final Observable observable = new BaseObservable() {};
+
+    assertThat(throwsIllegalStateExceptionForCallOnNonLooperThread(new Runnable() {
+      @Override
+      public void run() {
+        updatable.addToObservable(observable);
+      }
+    }), is(true));
+  }
+
+  @Test
+  public void shouldNotAllowCreatingBaseObservableOnNonLooperThread() {
+
+    assertThat(throwsIllegalStateExceptionForCallOnNonLooperThread(new Runnable() {
+      @Override
+      public void run() {
+        new BaseObservable() {};
+      }
+    }), is(true));
+  }
+
+  @Test
+  public void shouldNotAllowRemovingUpdatablesOnNonLooperThreadInBaseObservable() {
+    final Observable observable = new BaseObservable() {};
+    updatable.addToObservable(observable);
+
+    assertThat(throwsIllegalStateExceptionForCallOnNonLooperThread(new Runnable() {
+      @Override
+      public void run() {
+        updatable.removeFromObservables();
+      }
+    }), is(true));
+  }
+
+  @Test
+  public void shouldHandleLifeCycleInBaseObservable() {
+    final Observable observable = new BaseObservable() {};
+
+    updatable.addToObservable(observable);
+    updatable.removeFromObservables();
+  }
+
+  @Test
   public void shouldHavePrivateConstructor() {
     assertThat(Observables.class, hasPrivateConstructor());
+  }
+
+  private boolean throwsIllegalStateExceptionForCallOnNonLooperThread(
+      @NonNull final Runnable runnable) {
+    final AtomicBoolean gotException = new AtomicBoolean(false);
+    final Thread thread = new Thread(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          runnable.run();
+        } catch (IllegalStateException e) {
+          gotException.set(true);
+        }
+      }
+    });
+    thread.start();
+    try {
+      thread.join();
+    } catch (InterruptedException ignored) {
+    }
+    return gotException.get();
   }
 }

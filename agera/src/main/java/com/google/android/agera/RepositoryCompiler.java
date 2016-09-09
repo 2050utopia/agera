@@ -15,9 +15,11 @@
  */
 package com.google.android.agera;
 
+import static com.google.android.agera.Common.NULL_OPERATOR;
 import static com.google.android.agera.CompiledRepository.addBindWith;
 import static com.google.android.agera.CompiledRepository.addCheck;
 import static com.google.android.agera.CompiledRepository.addEnd;
+import static com.google.android.agera.CompiledRepository.addFilterFailure;
 import static com.google.android.agera.CompiledRepository.addFilterSuccess;
 import static com.google.android.agera.CompiledRepository.addGetFrom;
 import static com.google.android.agera.CompiledRepository.addGoLazy;
@@ -45,7 +47,7 @@ import java.util.concurrent.Executor;
 final class RepositoryCompiler implements
     RepositoryCompilerStates.RFrequency,
     RepositoryCompilerStates.RFlow,
-    RepositoryCompilerStates.RTermination,
+    RepositoryCompilerStates.RTerminationOrContinue,
     RepositoryCompilerStates.RConfig {
 
   private static final ThreadLocal<RepositoryCompiler> compilers = new ThreadLocal<>();
@@ -98,6 +100,8 @@ final class RepositoryCompiler implements
   private int deactivationConfig;
   @RepositoryConfig
   private int concurrentUpdateConfig;
+  @NonNull
+  private Receiver discardedValueDisposer = NULL_OPERATOR;
 
   @Expect
   private int expect;
@@ -251,7 +255,7 @@ final class RepositoryCompiler implements
     return this;
   }
 
-  private void endFlow(boolean skip) {
+  private void endFlow(final boolean skip) {
     addEnd(skip, directives);
     expect = CONFIG;
   }
@@ -363,6 +367,15 @@ final class RepositoryCompiler implements
     }
   }
 
+  @NonNull
+  @Override
+  public RepositoryCompiler orContinue() {
+    checkExpect(TERMINATE_THEN_END);
+    addFilterFailure(directives);
+    expect = FLOW;
+    return this;
+  }
+
   //endregion RTermination
 
   //region RConfig
@@ -393,6 +406,14 @@ final class RepositoryCompiler implements
 
   @NonNull
   @Override
+  public RepositoryCompiler sendDiscardedValuesTo(@NonNull final Receiver disposer) {
+    checkExpect(CONFIG);
+    discardedValueDisposer = checkNotNull(disposer);
+    return this;
+  }
+
+  @NonNull
+  @Override
   public Repository compile() {
     Repository repository = compileRepositoryAndReset();
     recycle(this);
@@ -412,7 +433,7 @@ final class RepositoryCompiler implements
   private Repository compileRepositoryAndReset() {
     checkExpect(CONFIG);
     Repository repository = compiledRepository(initialValue, eventSources, frequency, directives,
-        notifyChecker, concurrentUpdateConfig, deactivationConfig);
+        notifyChecker, concurrentUpdateConfig, deactivationConfig, discardedValueDisposer);
     expect = NOTHING;
     initialValue = null;
     eventSources.clear();
@@ -422,6 +443,7 @@ final class RepositoryCompiler implements
     notifyChecker = objectsUnequal();
     deactivationConfig = RepositoryConfig.CONTINUE_FLOW;
     concurrentUpdateConfig = RepositoryConfig.CONTINUE_FLOW;
+    discardedValueDisposer = NULL_OPERATOR;
     return repository;
   }
 

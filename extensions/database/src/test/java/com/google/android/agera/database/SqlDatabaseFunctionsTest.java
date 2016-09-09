@@ -15,6 +15,10 @@
  */
 package com.google.android.agera.database;
 
+import static android.database.sqlite.SQLiteDatabase.CONFLICT_FAIL;
+import static android.database.sqlite.SQLiteDatabase.CONFLICT_IGNORE;
+import static android.database.sqlite.SQLiteDatabase.CONFLICT_NONE;
+import static android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE;
 import static android.database.sqlite.SQLiteDatabase.create;
 import static com.google.android.agera.Result.success;
 import static com.google.android.agera.Suppliers.staticSupplier;
@@ -64,6 +68,7 @@ public final class SqlDatabaseFunctionsTest {
   private static final Supplier<Result<SQLiteDatabase>> FAILURE =
       staticSupplier(Result.<SQLiteDatabase>failure(new Exception()));
   private static final CursorStringFunction CURSOR_STRING_FUNCTION = new CursorStringFunction();
+  public static final String COLUMN = "column";
 
   private SQLiteDatabase database;
   private Supplier<Result<SQLiteDatabase>> databaseSupplier;
@@ -236,6 +241,92 @@ public final class SqlDatabaseFunctionsTest {
   }
 
   @Test
+  public void shouldAddFailConflictAlgorithmForUpdate() {
+    assertThat(sqlUpdateRequest()
+                .table(TABLE)
+                .column("column", "value4")
+                .where("column=?")
+                .arguments("value3")
+                .failOnConflict()
+                .compile().conflictAlgorithm,
+        is(CONFLICT_FAIL));
+  }
+
+  @Test
+  public void shouldAddReplaceConflictAlgorithmForUpdate() {
+    assertThat(sqlUpdateRequest()
+            .table(TABLE)
+            .column("column", "value4")
+            .where("column=?")
+            .arguments("value3")
+            .replaceOnConflict()
+            .compile().conflictAlgorithm,
+        is(CONFLICT_REPLACE));
+  }
+
+  @Test
+  public void shouldAddIgnoreConflictAlgorithmForUpdate() {
+    assertThat(sqlUpdateRequest()
+            .table(TABLE)
+            .column("column", "value4")
+            .where("column=?")
+            .arguments("value3")
+            .ignoreOnConflict()
+            .compile().conflictAlgorithm,
+        is(CONFLICT_IGNORE));
+  }
+
+  @Test
+  public void shouldNotAddConflictAlgorithmForUpdate() {
+    assertThat(sqlUpdateRequest()
+            .table(TABLE)
+            .column("column", "value4")
+            .where("column=?")
+            .arguments("value3")
+            .compile().conflictAlgorithm,
+        is(CONFLICT_NONE));
+  }
+
+  @Test
+  public void shouldNotAddConflictAlgorithmForInsert() {
+    assertThat(sqlInsertRequest()
+            .table(TABLE)
+            .emptyColumn("column")
+            .compile().conflictAlgorithm,
+        is(CONFLICT_NONE));
+  }
+
+  @Test
+  public void shouldAddFailConflictAlgorithmForInsert() {
+    assertThat(sqlInsertRequest()
+                .table(TABLE)
+                .emptyColumn("column")
+                .failOnConflict()
+                .compile().conflictAlgorithm,
+        is(CONFLICT_FAIL));
+  }
+
+  @Test
+  public void shouldAddIgnoreConflictAlgorithmForInsert() {
+    assertThat(sqlInsertRequest()
+            .table(TABLE)
+            .emptyColumn("column")
+            .ignoreOnConflict()
+            .compile().conflictAlgorithm,
+        is(CONFLICT_IGNORE));
+  }
+
+  @Test
+  public void shouldAddReplaceConflictAlgorithmForInsert() {
+    assertThat(sqlInsertRequest()
+            .table(TABLE)
+            .emptyColumn("column")
+            .replaceOnConflict()
+            .compile().conflictAlgorithm,
+        is(CONFLICT_REPLACE));
+  }
+
+  @Test
   public void shouldReturnErrorForFailedDatabaseCreationInInsert() throws Throwable {
     assertThat(databaseInsertFunction(FAILURE)
             .apply(sqlInsertRequest()
@@ -243,6 +334,186 @@ public final class SqlDatabaseFunctionsTest {
                 .column("column", "value")
                 .compile()).failed(),
         is(true));
+  }
+
+  @Test
+  public void shouldAddBooleanColumnForInsert() {
+    final boolean value = true;
+    assertThat(sqlInsertRequest()
+            .table(TABLE)
+            .column(COLUMN, value)
+            .compile().contentValues.getAsBoolean(COLUMN),
+        is(value));
+  }
+
+  @Test
+  public void shouldAddNullBooleanColumnForInsert() {
+    final Boolean nullValue = null;
+    assertThat(sqlInsertRequest()
+            .table(TABLE)
+            .column(COLUMN, nullValue)
+            .compile().contentValues.getAsBoolean(COLUMN),
+        is(nullValue));
+  }
+
+  @Test
+  public void shouldAddStringColumnForInsert() {
+    final String value = "string";
+    assertThat(sqlInsertRequest()
+            .table(TABLE)
+            .column(COLUMN, value)
+            .compile().contentValues.getAsString(COLUMN),
+        is(value));
+  }
+
+  @Test
+  public void shouldAddNullStringColumnForInsert() {
+    final String nullValue = null;
+    assertThat(sqlInsertRequest()
+            .table(TABLE)
+            .column(COLUMN, nullValue)
+            .compile().contentValues.getAsString(COLUMN),
+        is(nullValue));
+  }
+
+  @Test
+  public void shouldAddByteColumnForInsert() {
+    final byte value = 2;
+    assertThat(sqlInsertRequest()
+            .table(TABLE)
+            .column(COLUMN, value)
+            .compile().contentValues.getAsByte(COLUMN),
+        is(value));
+  }
+
+  @Test
+  public void shouldAddNullByteColumnForInsert() {
+    final Byte nullValue = null;
+    assertThat(sqlInsertRequest()
+            .table(TABLE)
+            .column(COLUMN, nullValue)
+            .compile().contentValues.getAsByte(COLUMN),
+        is(nullValue));
+  }
+
+  @Test
+  public void shouldAddIntegerColumnForInsert() {
+    final int value = 2;
+    assertThat(sqlInsertRequest()
+            .table(TABLE)
+            .column(COLUMN, value)
+            .compile().contentValues.getAsInteger(COLUMN),
+        is(value));
+  }
+
+  @Test
+  public void shouldAddNullIntegerColumnForInsert() {
+    final Integer nullValue = null;
+    assertThat(sqlInsertRequest()
+            .table(TABLE)
+            .column(COLUMN, nullValue)
+            .compile().contentValues.getAsInteger(COLUMN),
+        is(nullValue));
+  }
+
+  @Test
+  public void shouldAddShortColumnForInsert() {
+    final short value = 2;
+    assertThat(sqlInsertRequest()
+            .table(TABLE)
+            .column(COLUMN, value)
+            .compile().contentValues.getAsShort(COLUMN),
+        is(value));
+  }
+
+  @Test
+  public void shouldAddNullShortColumnForInsert() {
+    final Short nullValue = null;
+    assertThat(sqlInsertRequest()
+            .table(TABLE)
+            .column(COLUMN, nullValue)
+            .compile().contentValues.getAsShort(COLUMN),
+        is(nullValue));
+  }
+
+  @Test
+  public void shouldAddDoubleColumnForInsert() {
+    final double value = 2;
+    assertThat(sqlInsertRequest()
+            .table(TABLE)
+            .column(COLUMN, value)
+            .compile().contentValues.getAsDouble(COLUMN),
+        is(value));
+  }
+
+  @Test
+  public void shouldAddNullDoubleColumnForInsert() {
+    final Double nullValue = null;
+    assertThat(sqlInsertRequest()
+            .table(TABLE)
+            .column(COLUMN, nullValue)
+            .compile().contentValues.getAsDouble(COLUMN),
+        is(nullValue));
+  }
+
+  @Test
+  public void shouldAddFloatColumnForInsert() {
+    final float value = 2;
+    assertThat(sqlInsertRequest()
+            .table(TABLE)
+            .column(COLUMN, value)
+            .compile().contentValues.getAsFloat(COLUMN),
+        is(value));
+  }
+
+  @Test
+  public void shouldAddNullFloatColumnForInsert() {
+    final Float nullValue = null;
+    assertThat(sqlInsertRequest()
+            .table(TABLE)
+            .column(COLUMN, nullValue)
+            .compile().contentValues.getAsFloat(COLUMN),
+        is(nullValue));
+  }
+
+  @Test
+  public void shouldAddLongColumnForInsert() {
+    final long value = 2;
+    assertThat(sqlInsertRequest()
+            .table(TABLE)
+            .column(COLUMN, value)
+            .compile().contentValues.getAsLong(COLUMN),
+        is(value));
+  }
+
+  @Test
+  public void shouldAddNullLongColumnForInsert() {
+    final Long nullValue = null;
+    assertThat(sqlInsertRequest()
+            .table(TABLE)
+            .column(COLUMN, nullValue)
+            .compile().contentValues.getAsLong(COLUMN),
+        is(nullValue));
+  }
+
+  @Test
+  public void shouldAddByteArrayColumnForInsert() {
+    final byte[] value = "value".getBytes();
+    assertThat(sqlInsertRequest()
+            .table(TABLE)
+            .column(COLUMN, value)
+            .compile().contentValues.getAsByteArray(COLUMN),
+        is(value));
+  }
+
+  @Test
+  public void shouldAddNullByteArrayColumnForInsert() {
+    final byte[] nullValue = null;
+    assertThat(sqlInsertRequest()
+            .table(TABLE)
+            .column(COLUMN, nullValue)
+            .compile().contentValues.getAsByteArray(COLUMN),
+        is(nullValue));
   }
 
   @Test

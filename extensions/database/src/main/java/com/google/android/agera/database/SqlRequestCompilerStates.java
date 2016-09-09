@@ -16,6 +16,7 @@
 package com.google.android.agera.database;
 
 import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 
 /**
  * Container of the compiler state interfaces supporting the creation of sql requests.
@@ -72,16 +73,93 @@ public interface SqlRequestCompilerStates {
   interface DBColumn<T> {
 
     /**
-     * Adds a {@code column} with a {@code value}.
+     * Adds a {@code column} with a {@link String} {@code value}.
      */
     @NonNull
-    T column(@NonNull String column, @NonNull String value);
+    T column(@NonNull String column, @Nullable String value);
+
+    /**
+     * Adds a {@code column} with a {@link Byte} {@code value}.
+     */
+    @NonNull
+    T column(@NonNull String column, @Nullable Byte value);
+
+    /**
+     * Adds a {@code column} with a {@link Short} {@code value}.
+     */
+    @NonNull
+    T column(@NonNull String column, @Nullable Short value);
+
+    /**
+     * Adds a {@code column} with a {@link Integer} {@code value}.
+     */
+    @NonNull
+    T column(@NonNull String column, @Nullable Integer value);
+
+    /**
+     * Adds a {@code column} with a {@link Long} {@code value}.
+     */
+    @NonNull
+    T column(@NonNull String column, @Nullable Long value);
+
+    /**
+     * Adds a {@code column} with a {@link Float} {@code value}.
+     */
+    @NonNull
+    T column(@NonNull String column, @Nullable Float value);
+
+    /**
+     * Adds a {@code column} with a {@link Double} {@code value}.
+     */
+    @NonNull
+    T column(@NonNull String column, @Nullable Double value);
+
+    /**
+     * Adds a {@code column} with a {@link Boolean} {@code value}.
+     */
+    @NonNull
+    T column(@NonNull String column, @Nullable Boolean value);
+
+    /**
+     * Adds a {@code column} with a {@code byte} array {@code value}.
+     */
+    @NonNull
+    T column(@NonNull String column, @Nullable byte[] value);
 
     /**
      * Adds an empty {@code column}.
      */
     @NonNull
     T emptyColumn(@NonNull String column);
+  }
+
+  /**
+   * Compiler state allowing to add conflict algorithm.
+   * <p>
+   * The default algorithm aborts the current SQL statement with an SQLITE_CONSTRAINT
+   * error and backs out any changes made.
+   */
+  interface DBConflict<T> {
+
+    /**
+     * When a constraint violation occurs, the command aborts with a return code SQLITE_CONSTRAINT.
+     */
+    @NonNull
+    T failOnConflict();
+
+    /**
+     * When a constraint violation occurs, the one row that contains the constraint violation is not
+     * inserted or changed.
+     */
+    @NonNull
+    T ignoreOnConflict();
+
+    /**
+     * When a UNIQUE constraint violation occurs, the pre-existing rows that are causing the
+     * constraint violation are removed prior to inserting or updating the current row.
+     */
+    @NonNull
+    T replaceOnConflict();
   }
 
   /**
@@ -99,22 +177,38 @@ public interface SqlRequestCompilerStates {
   /**
    * Compiler state allowing to specify sql arguments or compile.
    */
-  interface DBArgumentCompile<T> extends DBArgument<DBCompile<T>>, DBCompile<T> {}
+  interface DBArgumentCompile<T, TC> extends DBArgument<TC>, DBCompile<T> {}
 
   /**
-   * Compiler state allowing to specify columns or compile.
+   * Compiler state allowing to specify sql arguments, conflict algorithm or compile.
    */
-  interface DBColumnCompile<T, TSelf extends DBColumnCompile<T, TSelf>>
-      extends DBColumn<TSelf>, DBCompile<T> {}
+  interface DBArgumentConflictCompile<T, TCc> extends DBArgument<TCc>, DBConflictCompile<T> {}
+
+  /**
+   * Compiler state allowing to specify columns, a conflict algorithm or compile.
+   */
+  interface DBColumnConflictCompile<T, TSelf extends DBColumnConflictCompile<T, TSelf>>
+      extends DBColumn<TSelf>, DBConflictCompile<T> {}
 
   /**
    * Compiler state allowing to specify a where clause or compile.
    */
-  interface DBWhereCompile<T> extends DBWhere<DBArgumentCompile<T>>, DBCompile<T> {}
+  interface DBWhereCompile<T, TAc> extends DBWhere<TAc>, DBCompile<T> {}
 
   /**
-   * Compiler state allowing to specify a column, where clause or compile.
+   * Compiler state allowing to specify a conflict algorithm or compile.
    */
-  interface DBColumnWhereCompile<T, TSelf extends DBColumnWhereCompile<T, TSelf>>
-      extends DBColumn<TSelf>, DBWhereCompile<T> {}
+  interface DBConflictCompile<T> extends DBConflict<DBCompile<T>>, DBCompile<T> {}
+
+  /**
+   * Compiler state allowing to specify a conflict algorithm, a where clause or compile.
+   */
+  interface DBWhereConflictCompile<T, TAcc> extends DBWhere<TAcc>, DBConflictCompile<T> {}
+
+  /**
+   * Compiler state allowing to specify a column, conflict algorithm, where clause or compile.
+   */
+  interface DBColumnWhereConflictCompile<T, TAac, TSelf
+      extends DBColumnWhereConflictCompile<T, TAac,TSelf>>
+      extends DBColumn<TSelf>, DBWhereConflictCompile<T, TAac> {}
 }

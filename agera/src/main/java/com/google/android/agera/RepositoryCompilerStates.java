@@ -17,6 +17,7 @@ package com.google.android.agera;
 
 import android.support.annotation.NonNull;
 
+import java.io.Closeable;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 
@@ -123,6 +124,12 @@ public interface RepositoryCompilerStates {
 
     @NonNull
     @Override
+    RTerminationOrContinue<TVal, Throwable, RConfig<TVal>,
+        RFlow<TVal, Throwable, ?>> thenAttemptGetFrom(
+            @NonNull Supplier<? extends Result<? extends TVal>> attemptSupplier);
+
+    @NonNull
+    @Override
     <TAdd, TCur> RFlow<TVal, TCur, ?> mergeIn(@NonNull Supplier<TAdd> supplier,
         @NonNull Merger<? super TPre, ? super TAdd, TCur> merger);
 
@@ -134,12 +141,26 @@ public interface RepositoryCompilerStates {
 
     @NonNull
     @Override
+    <TAdd> RTerminationOrContinue<TVal, Throwable, RConfig<TVal>,
+        RFlow<TVal, Throwable, ?>> thenAttemptMergeIn(
+            @NonNull Supplier<TAdd> supplier,
+            @NonNull Merger<? super TPre, ? super TAdd,
+                ? extends Result<? extends TVal>> attemptMerger);
+
+    @NonNull
+    @Override
     <TCur> RFlow<TVal, TCur, ?> transform(@NonNull Function<? super TPre, TCur> function);
 
     @NonNull
     @Override
     <TCur> RTermination<TVal, Throwable, RFlow<TVal, TCur, ?>> attemptTransform(
         @NonNull Function<? super TPre, Result<TCur>> attemptFunction);
+
+    @NonNull
+    @Override
+    RTerminationOrContinue<TVal, Throwable, RConfig<TVal>,
+        RFlow<TVal, Throwable, ?>> thenAttemptTransform(
+            @NonNull Function<? super TPre, ? extends Result<? extends TVal>> attemptFunction);
 
     // Asynchronous directives:
 
@@ -305,10 +326,13 @@ public interface RepositoryCompilerStates {
 
     /**
      * Perform the {@link #attemptGetFrom} directive and use the successful output value as the new
-     * value of the compiled repository, with notification if necessary.
+     * value of the compiled repository, with notification if necessary. If the attempt fails,
+     * either terminate the data processing flow, or continue onto the next directive for recovery,
+     * depending on the clause that follows.
      */
     @NonNull
-    RTermination<TVal, Throwable, RConfig<TVal>> thenAttemptGetFrom(
+    RTerminationOrContinue<TVal, Throwable, RConfig<TVal>,
+        ? extends RSyncFlow<TVal, Throwable, ?>> thenAttemptGetFrom(
             @NonNull Supplier<? extends Result<? extends TVal>> attemptSupplier);
 
     /**
@@ -321,10 +345,13 @@ public interface RepositoryCompilerStates {
 
     /**
      * Perform the {@link #attemptMergeIn} directive and use the successful output value as the new
-     * value of the compiled repository, with notification if necessary.
+     * value of the compiled repository, with notification if necessary. If the attempt fails,
+     * either terminate the data processing flow, or continue onto the next directive for recovery,
+     * depending on the clause that follows.
      */
     @NonNull
-    <TAdd> RTermination<TVal, Throwable, RConfig<TVal>> thenAttemptMergeIn(
+    <TAdd> RTerminationOrContinue<TVal, Throwable, RConfig<TVal>,
+        ? extends RSyncFlow<TVal, Throwable, ?>> thenAttemptMergeIn(
             @NonNull Supplier<TAdd> supplier,
             @NonNull Merger<? super TPre, ? super TAdd,
                 ? extends Result<? extends TVal>> attemptMerger);
@@ -339,10 +366,13 @@ public interface RepositoryCompilerStates {
 
     /**
      * Perform the {@link #attemptTransform} directive and use the successful output value as the
-     * new value of the compiled repository, with notification if necessary.
+     * new value of the compiled repository, with notification if necessary. If the attempt fails,
+     * either terminate the data processing flow, or continue onto the next directive for recovery,
+     * depending on the clause that follows.
      */
     @NonNull
-    RTermination<TVal, Throwable, RConfig<TVal>> thenAttemptTransform(
+    RTerminationOrContinue<TVal, Throwable, RConfig<TVal>,
+        ? extends RSyncFlow<TVal, Throwable, ?>> thenAttemptTransform(
             @NonNull Function<? super TPre, ? extends Result<? extends TVal>> attemptFunction);
   }
 
@@ -369,6 +399,29 @@ public interface RepositoryCompilerStates {
      */
     @NonNull
     TRet orEnd(@NonNull Function<? super TTerm, ? extends TVal> valueFunction);
+  }
+
+  /**
+   * Compiler state allowing to terminate or continue the data processing flow following a failed
+   * attempt to produce the new value of the repository.
+   *
+   * @param <TVal> Value type of the repository.
+   * @param <TTerm> Value type from which to terminate the flow.
+   * @param <TRet> Compiler state to return to if the flow is terminated.
+   * @param <TCon> Compiler state to return to if the flow is to continue.
+   */
+
+  interface RTerminationOrContinue<TVal, TTerm, TRet, TCon>
+      extends RTermination<TVal, TTerm, TRet> {
+
+    /**
+     * If the previous attempt failed, continue with the rest of the data processing flow, using the
+     * {@linkplain Result#getFailure() failure} as the input value to the next directive. Otherwise,
+     * end the data processing flow and use the successful output value from the attempt as the new
+     * value of the compiled repository, with notification if necessary.
+     */
+    @NonNull
+    TCon orContinue();
   }
 
   /**
@@ -415,6 +468,33 @@ public interface RepositoryCompilerStates {
      */
     @NonNull
     RConfig<TVal> onConcurrentUpdate(@RepositoryConfig int concurrentUpdateConfig);
+
+    /**
+     * Specifies a {@code disposer} to handle any intermediate values discarded from the data
+     * processing flow. Intermediate values may be discarded due to the rest of the flow being
+     * skipped by a skip directive or a termination clause ({@code thenSkip()}, {@code orSkip()} and
+     * {@code orEnd()}), or cancelled in compliance with the deactivation or concurrent update
+     * configuration. The disposer may want to check if the values should be disposed of in a proper
+     * way, such as calling {@link Closeable#close()} on all {@link Closeable} values.
+     *
+     * <p>In each occasion where an intermediate value is discarded, the disposer will receive the
+     * value computed by the last completed directive. If the last directive was an attempt that
+     * failed, the disposer will receive the failed {@link Result}.
+     *
+     * <p>The compiled repository will only avoid sending the current repository value (accessible
+     * from the {@link Repository#get()} method) to the disposer, if it happens to be {@code ==}
+     * (reference-equal) to the intermediate value being discarded. This ensures that the value,
+     * still exposed through {@link Repository#get()}, is not incorrectly disposed. However, no
+     * similar attempt will be made for the repository's initial value. If the initial value is
+     * disposable and {@link RepositoryConfig#RESET_TO_INITIAL_VALUE} is used, this may lead to
+     * incorrect disposal of the initial value. The disposer should take care of this case
+     * explicitly, or the repository should be designed to only publish values that need not be
+     * disposed of.
+     *
+     * @param disposer The {@link Receiver} to receive the discarded intermediate values.
+     */
+    @NonNull
+    RConfig<TVal> sendDiscardedValuesTo(@NonNull Receiver<Object> disposer);
 
     /**
      * Compiles a {@link Repository} that exhibits the previously defined behaviors.

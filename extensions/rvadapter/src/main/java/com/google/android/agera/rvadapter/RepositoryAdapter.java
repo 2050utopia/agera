@@ -23,9 +23,14 @@ import com.google.android.agera.Observable;
 import com.google.android.agera.Repository;
 import com.google.android.agera.Updatable;
 
+import android.annotation.TargetApi;
 import android.app.Activity;
+import android.app.Application.ActivityLifecycleCallbacks;
+import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.v7.widget.RecyclerView;
+import android.support.v7.widget.RecyclerView.Adapter;
+import android.support.v7.widget.RecyclerView.ViewHolder;
 import android.view.LayoutInflater;
 import android.view.ViewGroup;
 
@@ -51,12 +56,13 @@ import java.util.List;
  * <p>This adapter can be subclassed to handle special requirements, such as creating custom view
  * holders, handling item view lifecycle events, and implementing additional interfaces.
  */
-public class RepositoryAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
+public class RepositoryAdapter extends RecyclerView.Adapter<ViewHolder>
     implements Updatable {
 
   /**
    * Builds a {@link RepositoryAdapter}.
    */
+  @NonNull
   public static Builder repositoryAdapter() {
     return new Builder();
   }
@@ -84,6 +90,7 @@ public class RepositoryAdapter extends RecyclerView.Adapter<RecyclerView.ViewHol
      *     position.
      * @return This instance, for chaining.
      */
+    @NonNull
     public <T> Builder add(@NonNull final Repository<T> repository,
         @NonNull final RepositoryPresenter<T> presenter) {
       @SuppressWarnings("unchecked")
@@ -108,6 +115,7 @@ public class RepositoryAdapter extends RecyclerView.Adapter<RecyclerView.ViewHol
      *     {@link #add}; they will be observed automatically.
      * @return This instance, for chaining.
      */
+    @NonNull
     public Builder addAdditionalObservable(@NonNull final Observable observable) {
       observables.add(checkNotNull(observable));
       return this;
@@ -120,11 +128,138 @@ public class RepositoryAdapter extends RecyclerView.Adapter<RecyclerView.ViewHol
      * a new instance of the subclass, passing this builder to the base constructor
      * {@link RepositoryAdapter#RepositoryAdapter(Builder)}.
      */
+    @NonNull
     public RepositoryAdapter build() {
       return new RepositoryAdapter(this);
     }
 
+    /**
+     * Builds the {@link RepositoryAdapter} that presents the provided repositories in order and
+     * observes the repositories as well as any additional observables while the provided
+     * {@link Activity} is resumed (between {@link Activity#onResume()} and
+     * {@link Activity#onPause()}).
+     * <p>
+     * Note: Can only be called from {@link Activity#onCreate} ()}
+     */
+    @TargetApi(14)
+    @NonNull
+    public Adapter<ViewHolder> whileResumed(@NonNull final Activity activity) {
+      final RepositoryAdapter repositoryAdapter = new RepositoryAdapter(this);
+      activity.getApplication().registerActivityLifecycleCallbacks(
+          new WhileResumedActivityLifecycleCallbacks(activity, repositoryAdapter));
+      return repositoryAdapter;
+    }
+
+    /**
+     * Builds the {@link RepositoryAdapter} that presents the provided repositories in order and
+     * observes the repositories as well as any additional observables while the provided
+     * {@link Activity} is started (between (between {@link Activity#onStart()} and
+     * {@link Activity#onStop()}).
+     * <p>
+     * Note: Can only be called from {@link Activity#onCreate} ()}
+     */
+    @TargetApi(14)
+    @NonNull
+    public Adapter<ViewHolder> whileStarted(@NonNull final Activity activity) {
+      final RepositoryAdapter repositoryAdapter = new RepositoryAdapter(this);
+      activity.getApplication().registerActivityLifecycleCallbacks(
+          new WhileStartedActivityLifecycleCallbacks(activity, repositoryAdapter));
+      return repositoryAdapter;
+    }
+
     private Builder() {}
+
+    @TargetApi(14)
+    private static abstract class AdapterActivityLifecycleCallbacks
+        implements ActivityLifecycleCallbacks {
+      @NonNull
+      private final Activity activity;
+
+      protected AdapterActivityLifecycleCallbacks(@NonNull final Activity activity) {
+        this.activity = checkNotNull(activity);
+      }
+
+      @Override
+      public final void onActivityCreated(final Activity activity,
+          final Bundle savedInstanceState) {}
+
+      @Override
+      public void onActivityStarted(final Activity activity) {}
+
+      @Override
+      public void onActivityResumed(final Activity activity) {}
+
+      @Override
+      public void onActivityPaused(final Activity activity) {}
+
+      @Override
+      public void onActivityStopped(final Activity activity) {}
+
+      @Override
+      public final void onActivitySaveInstanceState(final Activity activity,
+          final Bundle outState) {}
+
+      @Override
+      public final void onActivityDestroyed(final Activity anyActivity) {
+        if (activity == anyActivity) {
+          activity.getApplication().unregisterActivityLifecycleCallbacks(this);
+        }
+      }
+    }
+
+    private static class WhileStartedActivityLifecycleCallbacks
+        extends AdapterActivityLifecycleCallbacks {
+      private final Activity activity;
+      private final RepositoryAdapter repositoryAdapter;
+
+      public WhileStartedActivityLifecycleCallbacks(final Activity activity,
+          final RepositoryAdapter repositoryAdapter) {
+        super(activity);
+        this.activity = activity;
+        this.repositoryAdapter = repositoryAdapter;
+      }
+
+      @Override
+      public void onActivityStarted(final Activity anyActivity) {
+        if (anyActivity == activity) {
+          repositoryAdapter.startObserving();
+        }
+      }
+
+      @Override
+      public void onActivityStopped(final Activity anyActivity) {
+          if (anyActivity == activity) {
+            repositoryAdapter.stopObserving();
+          }
+      }
+    }
+
+    private static class WhileResumedActivityLifecycleCallbacks
+        extends AdapterActivityLifecycleCallbacks {
+      private final Activity activity;
+      private final RepositoryAdapter repositoryAdapter;
+
+      public WhileResumedActivityLifecycleCallbacks(final Activity activity,
+          final RepositoryAdapter repositoryAdapter) {
+        super(activity);
+        this.activity = activity;
+        this.repositoryAdapter = repositoryAdapter;
+      }
+
+      @Override
+      public void onActivityResumed(final Activity anyActivity) {
+        if (anyActivity == activity) {
+          repositoryAdapter.startObserving();
+        }
+      }
+
+      @Override
+      public void onActivityPaused(final Activity anyActivity) {
+        if (anyActivity == activity) {
+          repositoryAdapter.stopObserving();
+        }
+      }
+    }
   }
 
   private final int repositoryCount;
@@ -229,29 +364,23 @@ public class RepositoryAdapter extends RecyclerView.Adapter<RecyclerView.ViewHol
   /**
    * Creates a new view holder holding the view inflated from the provided {@code layoutResourceId}.
    * This implementation inflates the view using the {@code parent}'s context and creates a holder
-   * that adds no value to the base class {@link RecyclerView.ViewHolder}. Override this method for
+   * that adds no value to the base class {@link ViewHolder}. Override this method for
    * any special requirements.
    */
   @Override
-  public RecyclerView.ViewHolder onCreateViewHolder(final ViewGroup parent,
+  public ViewHolder onCreateViewHolder(final ViewGroup parent,
       final int layoutResourceId) {
     return new RecyclerView.ViewHolder(
         LayoutInflater.from(parent.getContext()).inflate(layoutResourceId, parent, false)) {};
   }
 
   @Override
-  public final void onBindViewHolder(final RecyclerView.ViewHolder holder, final int position) {
+  public final void onBindViewHolder(final ViewHolder holder, final int position) {
     resolveIndices(position);
     int resolvedRepositoryIndex = this.resolvedRepositoryIndex;
     int resolvedItemIndex = this.resolvedItemIndex;
     presenters[resolvedRepositoryIndex].bind(
         data[resolvedRepositoryIndex], resolvedItemIndex, holder);
-  }
-
-  @Override
-  public void onViewRecycled(RecyclerView.ViewHolder holder) {
-    super.onViewRecycled(holder);
-    presenters[resolvedRepositoryIndex].recycled(holder);
   }
 
   /**
