@@ -21,9 +21,12 @@ import static com.google.android.agera.Result.failure;
 import static com.google.android.agera.Result.present;
 import static com.google.android.agera.Result.success;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasToString;
 import static org.hamcrest.Matchers.instanceOf;
+import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.isEmptyOrNullString;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
@@ -664,12 +667,27 @@ public final class ResultTest {
   }
 
   @Test
+  public void shouldReturnTrueForContainsOfSameValue() {
+    assertThat(SUCCESS_WITH_VALUE.contains(VALUE), is(true));
+  }
+
+  @Test
+  public void shouldReturnFalseForContainsOfOtherValue() {
+    assertThat(SUCCESS_WITH_OTHER_VALUE.contains(VALUE), is(false));
+  }
+
+  @Test
+  public void shouldReturnFalseForContainsOfFailure() {
+    assertThat(ABSENT.contains(VALUE), is(false));
+  }
+
+  @Test
   public void shouldBeSingletonForFailureWithoutExplicitThrowable() {
     assertThat(failure(), equalTo(failure()));
   }
 
   @Test
-  public void shouldVerifyEqualsForSqlDeleteRequest() {
+  public void shouldVerifyEqualsForResult() {
     EqualsVerifier.forClass(Result.class).verify();
   }
 
@@ -691,5 +709,20 @@ public final class ResultTest {
   @Test
   public void shouldPrintStringRepresentationForAbsent() {
     assertThat(ABSENT, hasToString(not(isEmptyOrNullString())));
+  }
+
+  @Test
+  public void shouldReturnEmptyListForAbsent() {
+    assertThat(ABSENT.asList(), is((empty())));
+  }
+
+  @Test
+  public void shouldReturnEmptyListForFailure() {
+    assertThat(FAILURE.asList(), is((empty())));
+  }
+
+  @Test
+  public void shouldReturnListWithValueForPresentWithValue() {
+    assertThat(PRESENT_WITH_VALUE.asList(), contains(VALUE));
   }
 }

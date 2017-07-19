@@ -18,9 +18,12 @@ package com.google.android.agera;
 import static com.google.android.agera.Preconditions.checkArgument;
 import static com.google.android.agera.Preconditions.checkNotNull;
 import static com.google.android.agera.Preconditions.checkState;
+import static java.util.Collections.singletonList;
 
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * An immutable object encapsulating the result of an <i>attempt</i>. An attempt is a call to
@@ -55,12 +58,15 @@ public final class Result<T> {
   @Nullable
   private final T value;
   @Nullable
+  private transient volatile List<T> list;
+  @Nullable
   private final Throwable failure;
 
   Result(@Nullable final T value, @Nullable final Throwable failure) {
     checkArgument(value != null ^ failure != null, "Illegal Result arguments");
     this.value = value;
     this.failure = failure;
+    this.list = value != null ? null : Collections.<T>emptyList();
   }
 
   /**
@@ -159,6 +165,24 @@ public final class Result<T> {
       return value;
     }
     throw new FailedResultException(failure);
+  }
+
+
+  /**
+   * Returns a list containing the value if it is present, or an empty list.
+   */
+  @NonNull
+  public List<T> asList() {
+    List<T> list = this.list;
+    if (list == null) {
+      synchronized (this) {
+        list = this.list;
+        if (list == null) {
+          this.list = list = singletonList(value);
+        }
+      }
+    }
+    return list;
   }
 
   /**
@@ -484,7 +508,7 @@ public final class Result<T> {
    */
   @NonNull
   public T orGetFrom(@NonNull final Supplier<? extends T> supplier) {
-    return value != null ? value : checkNotNull(supplier.get());
+    return value != null ? value : Preconditions.<T>checkNotNull(supplier.get());
   }
 
   /**
@@ -524,6 +548,10 @@ public final class Result<T> {
       return this;
     }
     return (Result<T>) attemptRecoverFunction.apply(failure);
+  }
+
+  public boolean contains(@NonNull final T value) {
+    return this.value != null && this.value.equals(value);
   }
 
   @Override

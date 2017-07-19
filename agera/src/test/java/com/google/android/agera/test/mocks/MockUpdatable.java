@@ -17,20 +17,21 @@ package com.google.android.agera.test.mocks;
 
 import static org.robolectric.shadows.ShadowLooper.runUiThreadTasksIncludingDelayedTasks;
 
+import android.support.annotation.NonNull;
 import com.google.android.agera.Observable;
 import com.google.android.agera.Updatable;
-
-import android.support.annotation.NonNull;
-
 import java.util.ArrayList;
 import java.util.List;
 
 public final class MockUpdatable implements Updatable {
-  private final List<Observable> observables = new ArrayList<>();
+  private final List<Observable> observables;
 
-  private boolean updated = false;
+  private boolean updated;
 
-  private MockUpdatable() {}
+  private MockUpdatable() {
+    this.observables = new ArrayList<>();
+    this.updated = false;
+  }
 
   @NonNull
   public static MockUpdatable mockUpdatable() {

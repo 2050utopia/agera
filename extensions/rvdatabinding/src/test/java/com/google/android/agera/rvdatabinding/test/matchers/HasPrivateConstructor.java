@@ -13,16 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.google.android.agera.rvadapter.test.matchers;
+package com.google.android.agera.rvdatabinding.test.matchers;
 
 import android.support.annotation.NonNull;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Modifier;
 import org.hamcrest.Description;
 import org.hamcrest.Factory;
 import org.hamcrest.Matcher;
 import org.hamcrest.TypeSafeMatcher;
-
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Modifier;
 
 public final class HasPrivateConstructor extends TypeSafeMatcher<Class<?>> {
   private static final HasPrivateConstructor INSTANCE = new HasPrivateConstructor();

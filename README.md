@@ -1,4 +1,5 @@
 ![Agera](https://raw.githubusercontent.com/google/agera/master/doc/images/agera.png)
+
 Reactive Programming for Android
 ================================
 [![Build Status](https://travis-ci.org/google/agera.svg?branch=master)](https://travis-ci.org/google/agera)
@@ -16,14 +17,14 @@ Usage
 To add a dependency using Gradle:
 
 ```
-  compile 'com.google.android.agera:agera:1.2.0-beta2'
+  compile 'com.google.android.agera:agera:1.3.0'
 ```
 
 Learn about Agera
 ------------------
 
 - [Agera Explained](https://github.com/google/agera/wiki)
-- [Agera Codelab] (https://codelabs.developers.google.com/codelabs/android-agera)
+- [Agera Codelab](https://codelabs.developers.google.com/codelabs/android-agera)
 
 Experimental Sample Extensions
 ------------------------------------
@@ -39,11 +40,11 @@ A few experimental sample extension libraries for Agera are also provided. These
 To add dependencies to these using Gradle:
 
 ```
-  compile 'com.google.android.agera:content:1.2.0-beta2'
-  compile 'com.google.android.agera:database:1.2.0-beta2'
-  compile 'com.google.android.agera:net:1.2.0-beta2'
-  compile 'com.google.android.agera:rvadapter:1.2.0-beta2'
-  compile 'com.google.android.agera:rvdatabinding:1.2.0-beta2'
+  compile 'com.google.android.agera:content:1.3.0'
+  compile 'com.google.android.agera:database:1.3.0'
+  compile 'com.google.android.agera:net:1.3.0'
+  compile 'com.google.android.agera:rvadapter:1.3.0'
+  compile 'com.google.android.agera:rvdatabinding:1.3.0'
 ```
 
 FAQ: What's the relation with RxJava?
